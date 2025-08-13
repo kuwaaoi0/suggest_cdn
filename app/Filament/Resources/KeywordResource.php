@@ -16,11 +16,11 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
 // サイトスコープ用のトレイトを使っているなら（あなたの実装に合わせて）
-//use App\Traits\ScopesToSite;
+use App\Filament\Resources\Traits\ScopesToSite;
 
 class KeywordResource extends Resource
 {
-    //use ScopesToSite;
+    use ScopesToSite;
 
     protected static ?string $model = Keyword::class;
 
@@ -59,7 +59,7 @@ class KeywordResource extends Resource
                 ->default(fn () => session('current_site_id')),
 
             // キーワード名
-            TextInput::make('name')
+            TextInput::make('label')
                 ->label('キーワード')
                 ->maxLength(255)
                 ->required()
@@ -100,7 +100,7 @@ class KeywordResource extends Resource
                     ->sortable()
                     ->toggleable(),
 
-                TextColumn::make('name')
+                TextColumn::make('label')
                     ->label('キーワード')
                     ->searchable()
                     ->sortable(),

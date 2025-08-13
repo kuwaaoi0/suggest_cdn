@@ -10,27 +10,27 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-Route::get('/suggest', function (Request $req) {
-    $q = trim((string) $req->query('query', ''));
-    $siteKey = (string) $req->query('site_key', '');
-    abort_if($siteKey === '', 403, 'site_key required');
+// Route::get('/suggest', function (Request $req) {
+//     $q = trim((string) $req->query('query', ''));
+//     $siteKey = (string) $req->query('site_key', '');
+//     abort_if($siteKey === '', 403, 'site_key required');
 
-    $all = ['iPhone 15 Pro','iPad Air','iMac','AirPods Pro','Apple Watch'];
+//     $all = ['iPhone 15 Pro','iPad Air','iMac','AirPods Pro','Apple Watch'];
 
-    // 前方一致（大文字小文字を無視）
-    $items = array_values(array_filter($all, function ($w) use ($q) {
-        if ($q === '') return false;
-        return stripos($w, $q) === 0;
-    }));
+//     // 前方一致（大文字小文字を無視）
+//     $items = array_values(array_filter($all, function ($w) use ($q) {
+//         if ($q === '') return false;
+//         return stripos($w, $q) === 0;
+//     }));
 
-    return response()->json([
-        'q'     => $q,
-        'items' => array_map(function ($w) {
-            return ['id' => crc32($w), 'label' => $w, 'genre' => null];
-        }, $items),
-        'meta'  => ['latency_ms' => 1],
-    ]);
-});
+//     return response()->json([
+//         'q'     => $q,
+//         'items' => array_map(function ($w) {
+//             return ['id' => crc32($w), 'label' => $w, 'genre' => null];
+//         }, $items),
+//         'meta'  => ['latency_ms' => 1],
+//     ]);
+// });
 
 Route::middleware(['check.api.key','check.site.origin','throttle.site'])
 ->get('/suggest', SuggestController::class);

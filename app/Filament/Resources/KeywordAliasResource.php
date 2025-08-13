@@ -54,15 +54,15 @@ class KeywordAliasResource extends Resource
     {
         return $form->schema([
             // current_site を自動セット（共有として登録したい運用があればここを調整）
-            Hidden::make('site_id')
-                ->default(fn () => session('current_site_id')),
+            // Hidden::make('site_id')
+            //     ->default(fn () => session('current_site_id')),
 
             // ← これまでは TextInput('keyword_id') 等だった想定。Select に置き換え。
             Select::make('keyword_id')
                 ->label('対象キーワード')
                 ->relationship(
                     name: 'keyword',           // KeywordAlias::keyword() リレーションが必要
-                    titleAttribute: 'name',
+                    titleAttribute: 'label',
                     modifyQueryUsing: function (Builder $query) {
                         $siteId = session('current_site_id');
                         $query->where(function ($q) use ($siteId) {
@@ -102,7 +102,7 @@ class KeywordAliasResource extends Resource
                     ->toggleable(),
 
                 // リレーション経由で表示（keyword.name）
-                TextColumn::make('keyword.name')
+                TextColumn::make('keyword.label')
                     ->label('対象キーワード'),
 
                 TextColumn::make('alias')

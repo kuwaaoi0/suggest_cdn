@@ -1,196 +1,231 @@
-/*! suggest.js — CDN配布用：クラス付与だけで検索サジェストを有効化
-  必要なdata属性:
-    data-site-key="公開サイトキー"                        // 必須
+/*! suggest.js — CDN配布用：属性 or クラス付与だけで検索サジェストを有効化
+  必要な data 属性（script または input）:
+    data-site-key="公開サイトキー"                        // 必須（script 側 or 各 input 側）
     data-api="https://api.example.com/api/suggest"        // 省略時 '/api/suggest'
     data-click="https://api.example.com/api/click"         // 省略時 API の /suggest を /click に置換
     data-api-key="公開APIキー"                             // 送信ヘッダ X-Suggest-Key に付与（推奨）
-    data-input-class="my-suggest"                          // 省略時 'my-suggest'
-    data-user-token="短命JWT"                              // 任意（ユーザー別出し分け）
-    data-debounce="120"                                    // 任意(ms)
-    data-min-chars="1"                                     // 任意
-    data-open-on-focus="true"                              // 任意: フォーカス時に既存文字で開く
+    data-min-chars="1"                                     // 何文字から発火
+    data-debounce="120"                                    // 入力デバウンス(ms)
+    data-open-on-focus="true|false"                        // フォーカス時に既存文字で開く
+    data-token="短命JWT" / data-token-url="/path/to/token" // 任意（ユーザー別最適化）
+  バインド対象:
+    - <input data-suggest>                                // 推奨（属性）
+    - <input class="my-suggest">                          // 互換（クラス）
+    - script に data-suggest=".selector"                  // セレクタ指定で自動バインド
 */
 (() => {
     const SCRIPT = document.currentScript;
+    // ------- グローバル既定（script の data-*） -------
+    const G = {
+      api:       (SCRIPT?.dataset?.api || '/api/suggest').replace(/\/+$/, ''),
+      click:      SCRIPT?.dataset?.click || null,
+      siteKey:    SCRIPT?.dataset?.siteKey || '',
+      apiKey:     SCRIPT?.dataset?.apiKey || '',
+      minChars:  +(SCRIPT?.dataset?.minChars || 1),
+      debounce:  +(SCRIPT?.dataset?.debounce || 120),
+      openOnFocus: String(SCRIPT?.dataset?.openOnFocus || 'false').toLowerCase() === 'true',
+      token:      SCRIPT?.dataset?.token || '',
+      tokenUrl:   SCRIPT?.dataset?.tokenUrl || '',
+      // 互換用（クラスでの自動バインド）
+      inputClass: SCRIPT?.dataset?.inputClass || 'my-suggest',
+      // セレクタでまとめてバインド（例: data-suggest=".header input[type=search]"）
+      selector:   SCRIPT?.dataset?.suggest || null,
+    };
+    if (!G.click) G.click = G.api.replace(/\/suggest(?:\?.*)?$/i, '/click');
 
-    // ---- 設定値 ----
-    const SITE_KEY     = SCRIPT?.dataset?.siteKey || '';
-    const API          = (SCRIPT?.dataset?.api || '/api/suggest').replace(/\/+$/, '');
-    const CLICK        = SCRIPT?.dataset?.click || API.replace(/\/suggest(?:\?.*)?$/i, '/click');
-    const API_KEY      = SCRIPT?.dataset?.apiKey || '';
-    const CLASS        = SCRIPT?.dataset?.inputClass || 'my-suggest';
-    const USER_TOKEN   = SCRIPT?.dataset?.userToken || '';
-    const DEBOUNCE_MS  = Number(SCRIPT?.dataset?.debounce || 120);
-    const MIN_CHARS    = Math.max(1, Number(SCRIPT?.dataset?.minChars || 1));
-    const OPEN_ON_FOCUS= String(SCRIPT?.dataset?.openOnFocus || 'false').toLowerCase() === 'true';
-
-    if (!SITE_KEY) console.warn('[Suggest] data-site-key is missing');
-
-    const COMMON_HEADERS = { 'Accept': 'application/json' };
-    if (API_KEY) COMMON_HEADERS['X-Suggest-Key'] = API_KEY;
-
-    // ---- ユーティリティ ----
-    const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
-    const escHtml = (s) => s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    const winX = () => ('scrollX' in window ? window.scrollX : window.pageXOffset);
-    const winY = () => ('scrollY' in window ? window.scrollY : window.pageYOffset);
-    const uid = (() => { let i = 0; return (p='sg') => `${p}-${Date.now().toString(36)}-${(++i).toString(36)}`; })();
-
-    function buildUrl(base, params) {
-      let u;
-      try { u = new URL(base, location.href); }
-      catch { const a = document.createElement('a'); a.href = base; u = new URL(a.href); }
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') u.searchParams.set(k, v); });
-      return u.toString();
+    if (!G.siteKey) {
+      // input 側 data-site-key での上書きを許容するので警告のみ
+      console.warn('[Suggest] data-site-key is missing on <script>; will look on each <input>.');
     }
 
-    // ---- メイン：入力要素にバインド ----
-    function attach(input) {
+    // ------- スタイル注入（最低限の見た目） -------
+    const css = `
+    .sg-wrap{position:relative}
+    .sg-panel{position:absolute;left:0;right:0;top:100%;z-index:9999;margin-top:6px;
+      background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.08);overflow:hidden}
+    .sg-item{padding:10px 12px;display:flex;gap:10px;align-items:center;cursor:pointer}
+    .sg-item:hover,.sg-item.active{background:#f1f5f9}
+    .sg-label{flex:1}
+    .sg-genre,.sg-badge{font-size:11px;padding:2px 6px;background:#e2e8f0;border-radius:999px;margin-left:6px}
+    .sg-footer{padding:8px 12px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;display:flex;justify-content:space-between}
+    `;
+    const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+
+    // ------- ユーティリティ -------
+    const esc = s => (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const debounce = (fn, ms=150)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
+
+    // 短命トークン（必要時のみ）
+    let cachedToken = G.token;
+    async function ensureToken(tokenUrl){
+      if (cachedToken) return cachedToken;
+      if (!tokenUrl) return '';
+      try {
+        const r = await fetch(tokenUrl, {credentials:'include'});
+        if (!r.ok) return '';
+        const j = await r.json().catch(()=>({}));
+        cachedToken = j.token || '';
+        return cachedToken;
+      } catch { return ''; }
+    }
+
+    // ------- 1入力にバインド -------
+    function bindInput(input, baseCfg){
       if (input.__sgAttached) return;
       input.__sgAttached = true;
 
-      let box = null;
-      let items = [];
-      let activeIndex = -1;
-      const listId = uid('sglist');
+      // 入力側 data-* で上書き
+      const cfg = {
+        api:        input.dataset.api        || baseCfg.api,
+        click:      input.dataset.click      || baseCfg.click,
+        siteKey:    input.dataset.siteKey    || baseCfg.siteKey,
+        apiKey:     input.dataset.apiKey     || baseCfg.apiKey,
+        minChars:  +(input.dataset.minChars  || baseCfg.minChars),
+        debounce:  +(input.dataset.debounce  || baseCfg.debounce),
+        openOnFocus: String(input.dataset.openOnFocus || String(baseCfg.openOnFocus)).toLowerCase()==='true',
+        token:      input.dataset.token      || baseCfg.token,
+        tokenUrl:   input.dataset.tokenUrl   || baseCfg.tokenUrl,
+      };
+      if (!cfg.click) cfg.click = cfg.api.replace(/\/suggest(?:\?.*)?$/i, '/click');
+      if (!cfg.siteKey) { console.warn('[Suggest] site-key missing on input', input); }
 
       // ARIA
       input.setAttribute('autocomplete', 'off');
       input.setAttribute('role', 'combobox');
       input.setAttribute('aria-autocomplete', 'list');
       input.setAttribute('aria-expanded', 'false');
-      input.setAttribute('aria-owns', listId);
 
-      // ---- ドロップダウン ----
-      function ensureBox() {
-        if (box) return box;
-        box = document.createElement('div');
-        box.className = 'sg-list';
-        box.id = listId;
-        box.setAttribute('role', 'listbox');
-        box.style.position = 'absolute';
-        box.style.zIndex = '9999';
-        document.body.appendChild(box);
-        position();
-        return box;
+      // ラッパー & パネル
+      if (!input.parentElement.classList.contains('sg-wrap')) {
+        const wrap = document.createElement('div');
+        wrap.className='sg-wrap';
+        input.parentElement.insertBefore(wrap, input);
+        wrap.appendChild(input);
       }
+      const wrap = input.parentElement;
+      const panel = document.createElement('div');
+      panel.className='sg-panel';
+      panel.hidden = true;
+      wrap.appendChild(panel);
 
-      function position() {
-        if (!box) return;
-        const r = input.getBoundingClientRect();
-        box.style.left = (winX() + r.left) + 'px';
-        box.style.top  = (winY() + r.bottom + 4) + 'px';
-        box.style.width= r.width + 'px';
-      }
+      let items=[], idx=-1, last='';
 
-      function close() {
-        if (box) { box.remove(); box = null; }
-        input.setAttribute('aria-expanded', 'false');
-        activeIndex = -1; items = [];
-      }
-
-      // ---- レンダリング ----
-      function render() {
-        if (!items.length) { close(); return; }
-        ensureBox();
-        box.innerHTML = '';
-        items.forEach((it, idx) => {
-          const opt = document.createElement('div');
-          opt.className = 'sg-item';
-          opt.setAttribute('role', 'option');
-          opt.setAttribute('id', `${listId}-opt-${idx}`);
-          opt.setAttribute('aria-selected', String(idx === activeIndex));
-          opt.innerHTML = escHtml(it.label) + (it.genre ? ` <span class="sg-genre">${escHtml(it.genre)}</span>` : '');
-          opt.addEventListener('mousedown', (e) => { e.preventDefault(); pick(idx); });
-          box.appendChild(opt);
+      function render(list){
+        items = list.map(x => (typeof x==='string') ? {label:x} : x);
+        if (!items.length){ panel.hidden=true; panel.innerHTML=''; input.setAttribute('aria-expanded','false'); return; }
+        panel.innerHTML = items.map((it,i)=>(
+          `<div class="sg-item" role="option" aria-selected="${i===idx}" data-i="${i}">
+            <span class="sg-label">${esc(it.label || it.name || '')}</span>
+            ${it.genre?`<span class="sg-genre">${esc(it.genre)}</span>`:''}
+            ${it.source?`<span class="sg-badge">${esc(it.source)}</span>`:''}
+          </div>`
+        )).join('') + `<div class="sg-footer"><span>↑↓選択・Enter決定・Esc閉じる</span></div>`;
+        panel.hidden = false;
+        input.setAttribute('aria-expanded','true');
+        panel.querySelectorAll('.sg-item').forEach(el=>{
+          el.addEventListener('mouseenter', ()=>highlight(+el.dataset.i));
+          el.addEventListener('mousedown',  (e)=>{ e.preventDefault(); choose(+el.dataset.i); });
         });
-        input.setAttribute('aria-expanded', 'true');
       }
 
-      // ---- 確定（クリック通知→反映） ----
-      function pick(idx) {
-        const it = items[idx]; if (!it) return;
+      function highlight(i){
+        idx = i;
+        panel.querySelectorAll('.sg-item').forEach((el,j)=>el.classList.toggle('active', j===i));
+      }
 
-        // クリック通知（Beacon → fetch）
-        try {
+      function choose(i){
+        const it = items[i]; if(!it) return;
+        // クリック通知（Beacon→fetch）
+        try{
           const payload = JSON.stringify({
-            site_key: SITE_KEY,
+            site_key: cfg.siteKey,
             keyword_id: it.id,
-            kind: it.kind || 'shared', // APIが返す 'user' | 'shared'
-            u: USER_TOKEN || ''
+            kind: it.kind || 'shared',
+            u: cfg.token || ''
           });
           if (navigator.sendBeacon) {
-            navigator.sendBeacon(CLICK, new Blob([payload], { type: 'application/json' }));
+            navigator.sendBeacon(cfg.click, new Blob([payload], { type:'application/json' }));
           } else {
-            fetch(CLICK, { method:'POST', headers:{ ...COMMON_HEADERS, 'Content-Type':'application/json' }, body: payload });
+            fetch(cfg.click, { method:'POST', headers: headers(true), body: payload });
           }
-        } catch {}
-
-        input.value = it.label;
+        }catch{}
+        input.value = it.label || it.name || '';
         close();
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-        input.form?.dispatchEvent(new Event('submit', { bubbles: true }));
+        input.dispatchEvent(new Event('change', {bubbles:true}));
+        input.form?.dispatchEvent(new Event('submit', {bubbles:true}));
       }
 
-      // ---- API呼び出し ----
-      const fetchSuggest = debounce(async () => {
-        const q = input.value.trim();
-        if (q.length < MIN_CHARS) { close(); return; }
+      function close(){
+        panel.hidden = true; panel.innerHTML = '';
+        input.setAttribute('aria-expanded','false');
+        idx = -1; items = [];
+      }
 
-        const url = buildUrl(API, { query: q, site_key: SITE_KEY, u: USER_TOKEN || '' });
-        try {
-          const res = await fetch(url, { headers: COMMON_HEADERS, credentials: 'omit', mode: 'cors' });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      function headers(json=false){
+        const h = {'Accept':'application/json'};
+        if (cfg.apiKey) h['X-Suggest-Key'] = cfg.apiKey;
+        if (json) h['Content-Type'] = 'application/json';
+        return h;
+      }
+
+      const onInput = debounce(async ()=>{
+        const q = input.value.trim();
+        if (q.length < cfg.minChars || q===last){ close(); return; }
+        last = q;
+        try{
+          const tk = cfg.token || await ensureToken(cfg.tokenUrl);
+          const u = new URL(cfg.api, location.origin);
+          u.searchParams.set('query', q);                 // ← バックエンド仕様に合わせる
+          u.searchParams.set('site_key', cfg.siteKey);
+          if (tk) u.searchParams.set('u', tk);
+          const res = await fetch(u.toString(), { headers: headers(), mode:'cors', credentials:'omit' });
+          if (!res.ok) throw new Error('HTTP '+res.status);
           const data = await res.json();
-          items = Array.isArray(data.items) ? data.items.slice(0, 10) : [];
-          if (items.length) { ensureBox(); position(); render(); }
-          else { close(); }
-        } catch (e) {
+          // どちらの形でも対応：[] か { items: [] }
+          const list = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []);
+          render(list);
+        }catch(e){
           console.warn('[Suggest] fetch failed:', e);
           close();
         }
-      }, DEBOUNCE_MS);
+      }, cfg.debounce);
 
-      // ---- イベント ----
-      input.addEventListener('input', fetchSuggest);
-      if (OPEN_ON_FOCUS) input.addEventListener('focus', () => { if (input.value.trim().length >= MIN_CHARS) fetchSuggest(); });
-      input.addEventListener('blur', () => setTimeout(close, 100));
-
-      input.addEventListener('keydown', (e) => {
-        if (!box) return;
-        if (e.key === 'ArrowDown') { activeIndex = Math.min(activeIndex + 1, items.length - 1); render(); e.preventDefault(); }
-        else if (e.key === 'ArrowUp') { activeIndex = Math.max(activeIndex - 1, 0); render(); e.preventDefault(); }
-        else if (e.key === 'Enter') { if (activeIndex >= 0) { pick(activeIndex); e.preventDefault(); } }
-        else if (e.key === 'Escape') { close(); }
+      input.addEventListener('input', onInput);
+      if (cfg.openOnFocus) input.addEventListener('focus', ()=>{ if (input.value.trim().length >= cfg.minChars) onInput(); });
+      input.addEventListener('keydown', (e)=>{
+        if (panel.hidden) return;
+        if (e.key==='ArrowDown'){ e.preventDefault(); highlight(Math.min(idx+1, items.length-1)); }
+        else if (e.key==='ArrowUp'){ e.preventDefault(); highlight(Math.max(idx-1, 0)); }
+        else if (e.key==='Enter'){ if (idx>=0){ e.preventDefault(); choose(idx); } }
+        else if (e.key==='Escape'){ close(); }
       });
-
-      const onPos = () => box && position();
-      window.addEventListener('resize', onPos);
-      window.addEventListener('scroll', onPos, true);
-
-      document.addEventListener('mousedown', (ev) => {
-        if (!box) return;
-        if (ev.target === input || box.contains(ev.target)) return;
-        close();
-      });
+      document.addEventListener('click', (e)=>{ if (!panel.contains(e.target) && e.target!==input) close(); });
     }
 
-    // ---- 初期化 ----
-    function boot() {
-      document.querySelectorAll('input.' + CLASS).forEach(attach);
+    // ------- 初期化（属性/クラス/セレクタすべて対応） -------
+    function boot(){
+      const inputs = new Set();
+      // data-suggest 属性の input
+      document.querySelectorAll('input[data-suggest]').forEach(el => inputs.add(el));
+      // クラス（互換）
+      document.querySelectorAll('input.'+G.inputClass).forEach(el => inputs.add(el));
+      // セレクタ明示（script の data-suggest=".xxx"）
+      if (G.selector) document.querySelectorAll(G.selector).forEach(el => inputs.add(el));
+
+      inputs.forEach(el => bindInput(el, G));
 
       // 動的追加にも対応
-      const mo = new MutationObserver((recs) => {
+      const mo = new MutationObserver((recs)=>{
         for (const r of recs) {
-          r.addedNodes && r.addedNodes.forEach((n) => {
-            if (n.nodeType === 1) {
-              if (n.matches?.('input.' + CLASS)) attach(n);
-              n.querySelectorAll?.('input.' + CLASS).forEach(attach);
-            }
+          r.addedNodes && r.addedNodes.forEach(n=>{
+            if (n.nodeType!==1) return;
+            if (n.matches?.('input[data-suggest], input.'+G.inputClass)) bindInput(n, G);
+            n.querySelectorAll?.('input[data-suggest], input.'+G.inputClass).forEach(el=>bindInput(el, G));
+            if (G.selector) n.querySelectorAll?.(G.selector).forEach(el=>bindInput(el, G));
           });
         }
       });
-      mo.observe(document.documentElement, { childList: true, subtree: true });
+      mo.observe(document.documentElement, {childList:true, subtree:true});
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
