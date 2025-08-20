@@ -1,9 +1,6 @@
 # Suggest CDN (Laravel + JS)
 
-A Laravel-backed, CDN-distributable suggestion library.  
-Tag your `<input>` fields and get instant suggestions—no heavy setup.
-
-日本語: Laravel 製バックエンド + CDN 配信のフロント JS で、`<input>` にタグを付けるだけでサジェスト機能を実装できます。
+ Laravel 製バックエンド + CDN 配信のフロント JS で、`<input>` にタグを付けるだけでサジェスト機能を実装できます。
 
 ## Features
 
