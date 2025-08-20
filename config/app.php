@@ -15,6 +15,8 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    'diag_key' => env('APP_DIAG_KEY'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment
@@ -52,7 +54,7 @@ return [
     |
     */
 
-    'url' => env('APP_URL', 'http://localhost'),
+    'url' => env('APP_URL', 'https://xn--hck1ajf9e6666bhk3a.com'),
 
     /*
     |--------------------------------------------------------------------------

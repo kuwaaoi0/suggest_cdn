@@ -17,6 +17,8 @@ use Illuminate\Database\Eloquent\Builder;
 // ↓ プロジェクトにあるなら（各Resourceで使っている想定のトレイト）
 //use App\Traits\ScopesToSite;
 
+use Illuminate\Support\Facades\Auth;
+
 class KeywordAliasResource extends Resource
 {
     // サイトスコープのトレイトを使っている場合は有効化
@@ -64,20 +66,15 @@ class KeywordAliasResource extends Resource
                     name: 'keyword',           // KeywordAlias::keyword() リレーションが必要
                     titleAttribute: 'label',
                     modifyQueryUsing: function (Builder $query) {
-                        $siteId = session('current_site_id');
-                        $query->where(function ($q) use ($siteId) {
-                            $q->where('site_id', $siteId)
-                              ->orWhereNull('site_id'); // 共有(NULL)も候補に含める
-                        })->orderBy('name');
+                        $query->where('user_id', Auth::id())
+                        ->orderBy('name');
                     }
                 )
                 ->searchable()    // 入力で絞り込み
                 ->preload()       // 候補を先読み（数が多ければ外す）
                 ->required()
                 // 共有レコードを見分けやすくする表示
-                ->getOptionLabelFromRecordUsing(
-                    fn ($record) => $record->name . ($record->site_id ? '' : '（共有）')
-                ),
+                ->getOptionLabelFromRecordUsing(fn ($record) => $record->label),
 
             TextInput::make('alias')
                 ->label('別名')
@@ -149,4 +146,14 @@ class KeywordAliasResource extends Resource
             'edit'   => Pages\EditKeywordAlias::route('/{record}/edit'),
         ];
     }
+
+public static function shouldRegisterNavigation(): bool
+{
+    return false; // ナビに出さない
+}
+
+public static function canViewAny(): bool
+{
+    return false; // 一覧にアクセスさせない
+}
 }

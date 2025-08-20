@@ -17,7 +17,29 @@ class ClickController extends Controller
     {
         // JSON/FORM どちらでも受ける
         $payload = $req->all();
-        $siteKey    = (string)($payload['site_key'] ?? $req->query('site_key', ''));
+    	$siteKey = (string) (
+        	$req->input('site_key')             // JSON body / form
+        	?? $req->query('site_key')          // URL query（今回追加した保険）
+        	?? $req->header('X-Site-Key')       // 予備（使う場合）
+        	?? ''
+    	);
+
+    	if ($siteKey === '') {
+        	$raw = $req->getContent();
+        	if (is_string($raw) && $raw !== '') {
+            	try {
+                	$json = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+                	if (is_array($json) && isset($json['site_key'])) {
+                    	$siteKey = (string) $json['site_key'];
+                	}
+            	} catch (\Throwable $e) {
+                	// 何もしない（JSONでなければスルー）
+            	}
+        	}
+    	}
+
+    	abort_if($siteKey === '', 400, 'site_key required');
+
         $keywordId  = (int)   ($payload['keyword_id'] ?? 0);
         $userToken  = (string)($payload['u'] ?? $req->header('X-User-Token', ''));
 

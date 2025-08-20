@@ -11,8 +11,28 @@ class CheckApiKey
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $siteKey = (string) $request->query('site_key', '');
-        if ($siteKey === '') abort(403, 'site_key required');
+        $siteKey = (string) (
+            $request->query('site_key')
+            ?? $request->input('site_key')
+            ?? $request->header('X-Site-Key')
+            ?? ''
+        );
+
+        if ($siteKey === '') {
+            $raw = $request->getContent();
+            if (is_string($raw) && $raw !== '') {
+                try {
+                    $json = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+                    if (is_array($json) && isset($json['site_key'])) {
+                        $siteKey = (string) $json['site_key'];
+                    }
+                } catch (\Throwable $e) {
+                    // JSON でなければ無視
+                }
+            }
+        }
+
+        abort_if($siteKey === '', 400, 'site_key required');
 
         $site = Site::where('site_key', $siteKey)->where('is_active', true)->first();
         if (!$site) abort(403, 'invalid site');

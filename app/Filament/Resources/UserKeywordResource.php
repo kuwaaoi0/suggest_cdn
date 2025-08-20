@@ -12,6 +12,8 @@ use App\Filament\Resources\UserKeywordResource\Pages;
 
 class UserKeywordResource extends Resource
 {
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $model = UserKeyword::class;
     protected static ?string $navigationIcon = 'heroicon-o-user';
     protected static ?string $navigationGroup = 'Dictionary';

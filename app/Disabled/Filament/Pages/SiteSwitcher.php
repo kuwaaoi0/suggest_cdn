@@ -1,6 +1,7 @@
 <?php
 
-namespace App\Filament\Pages;
+//namespace App\Filament\Pages;
+namespace App\Disabled\Filament\Pages;
 
 use Filament\Pages\Page;
 use Filament\Forms;

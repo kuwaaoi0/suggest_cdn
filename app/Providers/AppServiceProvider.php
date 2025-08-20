@@ -6,6 +6,9 @@ use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvi
 use Illuminate\Auth\Events\Registered;
 use App\Listeners\CreateDefaultSiteForUser;
 
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
+
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -29,5 +32,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         //
+	FilamentView::registerRenderHook(
+		PanelsRenderHook::AUTH_LOGIN_FORM_AFTER,
+		fn (): string => view('filament/custom/login-register-link')->render()
+	);
     }
 }

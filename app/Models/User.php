@@ -6,7 +6,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 
 class User extends Authenticatable
 {
@@ -47,10 +50,22 @@ class User extends Authenticatable
         ];
     }
 
-    public function sites()
+    public function canAccessPanel(Panel $panel): bool
     {
-        return $this->belongsToMany(\App\Models\Site::class)
-            ->withTimestamps()
-            ->withPivot('role'); // owner / member など
+        return true; // まずは全員通す
     }
+
+    public function sites(): BelongsToMany
+    {
+        // pivot名やFKがデフォルト通り（site_user, user_id, site_id）ならこのままでOK
+        return $this->belongsToMany(Site::class, 'site_user', 'user_id', 'site_id')
+                    ->withTimestamps();
+    }
+
+    public function siteIds(): array
+    {
+        return $this->sites()->pluck('sites.id')->map(fn($v) => (int) $v)->all();
+    }
+
 }
+

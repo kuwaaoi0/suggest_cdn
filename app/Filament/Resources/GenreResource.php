@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Auth;
 
 class GenreResource extends Resource
 {
-    use ScopesToSite;
+    //use ScopesToSite;
 
     protected static ?string $model = Genre::class;
 
@@ -50,12 +50,12 @@ class GenreResource extends Resource
     {
         return $form->schema([
             // A) ユーザーが所属する最初のサイトIDを自動セット
-            Forms\Components\Hidden::make('site_id')
-            ->default(fn () => (int) session('current_site_id') ?: (Auth::user()?->sites()->value('sites.id'))),
+            //Forms\Components\Hidden::make('site_id')
+            //->default(fn () => (int) session('current_site_id') ?: (Auth::user()?->sites()->value('sites.id'))),
 
             // 既存のフォーム項目に続く…
-            Forms\Components\TextInput::make('name')->required()->maxLength(255),
-            Forms\Components\TextInput::make('slug')->helperText('空なら自動生成')->maxLength(255),
+            Forms\Components\TextInput::make('name')->required()->maxLength(255)->columnSpanFull(),
+            //Forms\Components\TextInput::make('slug')->helperText('空なら自動生成')->maxLength(255),
             Forms\Components\Toggle::make('is_active')->default(true),
         ]);
     }
@@ -66,7 +66,7 @@ class GenreResource extends Resource
             ->columns([
                 // 既存のカラム…
                 Tables\Columns\TextColumn::make('name')->searchable(),
-                Tables\Columns\TextColumn::make('slug')->toggleable(isToggledHiddenByDefault: true),
+                //Tables\Columns\TextColumn::make('slug')->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\IconColumn::make('is_active')->boolean(),
             ])
             ->filters([
@@ -95,4 +95,10 @@ class GenreResource extends Resource
             'edit' => Pages\EditGenre::route('/{record}/edit'),
         ];
     }
+
+     public static function getEloquentQuery(): Builder
+     {
+	return parent::getEloquentQuery()->where('user_id', Auth::id());
+     }
+
 }

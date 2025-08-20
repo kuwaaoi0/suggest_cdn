@@ -27,7 +27,29 @@ class SuggestController extends Controller
         $started = microtime(true);
 
         $q       = trim((string) $req->query('query', ''));
-        $siteKey = (string) $req->query('site_key', '');
+	$siteKey = (string) (
+    		$req->query('site_key')
+    		?? $req->input('site_key')
+    		?? $req->header('X-Site-Key')
+    		?? ''
+	);
+
+    	if ($siteKey === '') {
+        	$raw = $req->getContent();
+        	if (is_string($raw) && $raw !== '') {
+            	try {
+                	$json = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+                	if (is_array($json) && isset($json['site_key'])) {
+                    	$siteKey = (string) $json['site_key'];
+                	}
+            	} catch (\Throwable $e) {
+                	// スルー
+            	}
+        	}
+    	}
+
+    	abort_if($siteKey === '', 400, 'site_key required');
+
         $limit   = (int) $req->query('limit', 20);
         $limit   = max(1, min(20, $limit)); // 1..20 に丸め
 
@@ -38,6 +60,11 @@ class SuggestController extends Controller
         // サイト検証
         $site = Site::where('site_key', $siteKey)->where('is_active', true)->first();
         abort_if(!$site, 403, 'invalid site');
+
+	$ownerUserId = $site->users()->wherePivot('role', 'owner')->value('users.id')
+		?? $site->users()->value('users.id');
+	abort_if(!$ownerUserId, 403, 'no owner for site');
+
 
         // ユーザー識別（短命JWT）
         $userToken   = (string) $req->query('u', $req->header('X-User-Token', ''));
@@ -60,7 +87,8 @@ class SuggestController extends Controller
 
         // ---------- 1) Keyword 直接ヒット ----------
         $base = Keyword::query()
-            ->where('is_active', true)
+	    ->where('user_id', $ownerUserId)
+	    ->where('is_active', true)
             ->where(function ($w) use ($qNorm) {
                 $w->where('label_norm',   'like', $qNorm.'%')        // 前方一致（速い）
                   ->orWhere('label_norm', 'like', '% '.$qNorm.'%')   // 単語境界の部分一致
@@ -93,6 +121,7 @@ class SuggestController extends Controller
 
         // ---------- 2) 別名（KeywordAlias）ヒットを追加 ----------
         $aliasHits = KeywordAlias::query()
+	    ->whereHas('keyword', fn($q) => $q->where('user_id', $ownerUserId)->where('is_active', true))
             ->where('alias_norm', 'like', $qNorm.'%')     // 別名は前方一致で
             ->limit(50)
             ->with(['keyword' => function ($q) {

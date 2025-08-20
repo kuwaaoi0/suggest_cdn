@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\OwnedByUser;
 
 class KeywordAlias extends Model
 {
+    use OwnedByUser;
+
     protected $fillable = ['keyword_id','alias','alias_norm'];
 
     protected static function booted()

@@ -3,10 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\OwnedByUser;
 
 class Keyword extends Model
 {
-    protected $fillable = ['label','reading','genre_id','weight','is_active','label_norm','reading_norm'];
+
+    use OwnedByUser;
+
+    protected $fillable = ['user_id','label','reading','genre_id','weight','is_active','label_norm','reading_norm'];
+    public function user(){ return $this->belongsTo(\App\Models\User::class); }
     public function genre(){ return $this->belongsTo(Genre::class); }
 
     protected static function booted()

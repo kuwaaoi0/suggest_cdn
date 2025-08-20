@@ -12,34 +12,79 @@ class CheckSiteOrigin
     public function handle(Request $request, Closure $next): Response
     {
         $siteKey = (string) $request->query('site_key', '');
-        if ($siteKey === '') {
-            // site_keyが無いAPIにも使えるよう、何もせず通す（必要なら 403 にしてもOK）
-            return $next($request);
-        }
 
-        $site = Site::where('site_key', $siteKey)->where('is_active', true)->first();
-        if (!$site) {
-            abort(403, 'invalid site');
-        }
+        // リクエストのオリジンを取得（Origin優先、なければRefererから復元）
+        $origin = $request->headers->get('Origin') ?: $this->originFromReferer($request->headers->get('Referer'));
 
-        $origin = $request->headers->get('Origin');
-        $allowed = $site->allowed_origins ?? [];
-
-        if (!empty($allowed) && $origin) {
-            if (!in_array($origin, $allowed, true)) {
-                abort(403, 'origin not allowed');
+        // サイト設定の allowed_origins を配列化
+        $allowed = [];
+        if ($siteKey !== '') {
+            $site = Site::where('site_key', $siteKey)->first();
+            if ($site) {
+                $allowed = $this->parseAllowed($site->allowed_origins);
             }
         }
 
         /** @var Response $response */
         $response = $next($request);
 
-        // 許可したOriginをレスポンスに反映（CORS: GET/POST想定）
-        if ($origin && (empty($allowed) || in_array($origin, $allowed, true))) {
-            $response->headers->set('Access-Control-Allow-Origin', $origin);
-            $response->headers->set('Vary', 'Origin');
+        // 許可した Origin をレスポンスに反映（CORS: 実リクエスト用。プリフライトは HandleCors が対応）
+        if ($origin) {
+            if (empty($allowed) || in_array('*', $allowed, true) || in_array($this->normalizeOrigin($origin), $allowed, true)) {
+                $response->headers->set('Access-Control-Allow-Origin', $origin);
+                $response->headers->set('Vary', 'Origin');
+            }
         }
 
         return $response;
     }
+
+    private function originFromReferer(?string $referer): ?string
+    {
+        if (!$referer) {
+            return null;
+        }
+        $parts = parse_url($referer);
+        if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
+            return null;
+        }
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+        return $this->normalizeOrigin($parts['scheme'] . '://' . $parts['host'] . $port);
+    }
+
+    private function normalizeOrigin(string $origin): string
+    {
+        return rtrim(mb_strtolower(trim($origin)), '/');
+    }
+
+    /**
+     * DBの allowed_origins を配列に正規化
+     * - 空/NULL → []
+     * - 文字列（カンマ or 空白/改行区切り）→ 分割して正規化
+     * - 配列 → 正規化のみ
+     * - '*' を含む場合はワイルドカード許可
+     *
+     * @return array<string>
+     */
+    private function parseAllowed(mixed $raw): array
+    {
+        if ($raw === null) {
+            return [];
+        }
+        if (is_array($raw)) {
+            $items = $raw;
+        } else {
+            $raw = trim((string) $raw);
+            if ($raw === '') {
+                return [];
+            }
+            // カンマ or 連続空白/改行で分割
+            $items = preg_split('/\s*,\s*|\s+/', $raw) ?: [];
+        }
+
+        $items = array_map(fn ($v) => $this->normalizeOrigin((string) $v), $items);
+        $items = array_values(array_filter(array_unique($items), fn ($v) => $v !== ''));
+        return $items;
+    }
 }
+

@@ -1,53 +1,219 @@
-/* ベース */
-.sg-list {
-    position: absolute;
-    z-index: 9999;
-    background: #fff;
-    color: #111;
-    border: 1px solid rgba(0,0,0,.1);
-    border-radius: 10px;
-    box-shadow: 0 10px 25px rgba(0,0,0,.08);
-    overflow: hidden;
-    max-height: 320px;
-    overflow-y: auto;
-    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-  }
+/* =====================================================================
+   Suggest UI — themeable override stylesheet
+   ※ 既存実装を壊さないよう、レイアウト系は極力変更せず
+   ※ 見た目（色/フォント/角丸/影 等）のみを CSS Variables で上書き
+   ===================================================================== */
 
-  .sg-item {
-    padding: 10px 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
+/* 基本トークン（必要に応じて親要素や :root で上書き可能） */
+:root {
+  --suggest-font-family: inherit;
+  --suggest-font-size: 14px;
+  --suggest-fg: inherit;
+  --suggest-bg: #ffffff;
+  --suggest-border: #e5e7eb;
+  --suggest-radius: 10px;
+  --suggest-shadow: 0 8px 24px rgba(0, 0, 0, .06);
+  --suggest-active-bg: #eef2ff;
+  --suggest-muted: #64748b;
+  --suggest-separator: #e5e7eb;
+  --suggest-max-h: 320px;
+  --suggest-z: 2147483000; /* ほぼ最前面 */
+}
 
-  .sg-item:hover,
-  .sg-item[aria-selected="true"] {
-    background: #f3f4f6; /* gray-100 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --suggest-bg: #0f172a;
+    --suggest-fg: #e5e7eb;
+    --suggest-border: #1f2937;
+    --suggest-shadow: 0 10px 28px rgba(0, 0, 0, .45);
+    --suggest-active-bg: #1e293b;
+    --suggest-muted: #94a3b8;
+    --suggest-separator: #233044;
   }
+}
 
-  .sg-genre {
-    margin-left: auto;
-    font-size: 12px;
-    color: #6b7280; /* gray-500 */
-  }
+/* ---------------------------------------------------------------------
+   ドロップダウン本体（クラス/属性/ARIA の複数形式をサポート）
+   --------------------------------------------------------------------- */
+.suggest-dropdown,
+[data-suggest-dropdown],
+[role="listbox"].suggest-dropdown,
+[role="listbox"][data-suggest-dropdown] {
+  font-family: var(--suggest-font-family);
+  font-size: var(--suggest-font-size);
+  color: var(--suggest-fg);
+  background: var(--suggest-bg);
+  border: 1px solid var(--suggest-border);
+  border-radius: var(--suggest-radius);
+  box-shadow: var(--suggest-shadow);
+  max-height: var(--suggest-max-h);
+  overflow: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  z-index: var(--suggest-z);
+}
 
-  /* 小さめスクリーンでの幅制御（必要なら） */
-  @media (max-width: 480px) {
-    .sg-list { max-width: 95vw; }
-  }
+/* 余白系（既存の margin/padding を大きく変えない程度に） */
+.suggest-dropdown .suggest-list,
+[data-suggest-dropdown] .suggest-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+}
 
-  /* ダークモード */
-  @media (prefers-color-scheme: dark) {
-    .sg-list {
-      background: #0b0b0b;
-      color: #e5e7eb;
-      border-color: rgba(255,255,255,.12);
-      box-shadow: 0 10px 25px rgba(0,0,0,.35);
-    }
-    .sg-item:hover,
-    .sg-item[aria-selected="true"] {
-      background: #111827; /* gray-900 */
-    }
-    .sg-genre { color: #9ca3af; }
+/* アイテム */
+.suggest-item,
+[role="option"].suggest-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.4;
+}
+
+/* ホバー/選択状態（キーボード操作時も視認性を確保） */
+.suggest-item:hover,
+.suggest-item.is-active,
+[role="option"].suggest-item[aria-selected="true"] {
+  background: var(--suggest-active-bg);
+}
+
+/* サブラベルや補助テキスト */
+.suggest-item .sublabel,
+.suggest-item .meta {
+  font-size: 12px;
+  color: var(--suggest-muted);
+}
+
+/* 区切り線 */
+.suggest-separator {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--suggest-separator);
+}
+
+/* スクロールバー（非必須） */
+.suggest-dropdown::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.suggest-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, .35);
+  border-radius: 8px;
+}
+.suggest-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* =====================================================================
+   Suggest UI — themeable override stylesheet
+   ※ 既存実装を壊さないよう、レイアウト系は極力変更せず
+   ※ 見た目（色/フォント/角丸/影 等）のみを CSS Variables で上書き
+   ===================================================================== */
+
+/* 基本トークン（必要に応じて親要素や :root で上書き可能） */
+:root {
+  --suggest-font-family: inherit;
+  --suggest-font-size: 14px;
+  --suggest-fg: inherit;
+  --suggest-bg: #ffffff;
+  --suggest-border: #e5e7eb;
+  --suggest-radius: 10px;
+  --suggest-shadow: 0 8px 24px rgba(0, 0, 0, .06);
+  --suggest-active-bg: #eef2ff;
+  --suggest-muted: #64748b;
+  --suggest-separator: #e5e7eb;
+  --suggest-max-h: 320px;
+  --suggest-z: 2147483000; /* ほぼ最前面 */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --suggest-bg: #0f172a;
+    --suggest-fg: #e5e7eb;
+    --suggest-border: #1f2937;
+    --suggest-shadow: 0 10px 28px rgba(0, 0, 0, .45);
+    --suggest-active-bg: #1e293b;
+    --suggest-muted: #94a3b8;
+    --suggest-separator: #233044;
   }
+}
+
+/* ---------------------------------------------------------------------
+   ドロップダウン本体（クラス/属性/ARIA の複数形式をサポート）
+   --------------------------------------------------------------------- */
+.suggest-dropdown,
+[data-suggest-dropdown],
+[role="listbox"].suggest-dropdown,
+[role="listbox"][data-suggest-dropdown] {
+  font-family: var(--suggest-font-family);
+  font-size: var(--suggest-font-size);
+  color: var(--suggest-fg);
+  background: var(--suggest-bg);
+  border: 1px solid var(--suggest-border);
+  border-radius: var(--suggest-radius);
+  box-shadow: var(--suggest-shadow);
+  max-height: var(--suggest-max-h);
+  overflow: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  z-index: var(--suggest-z);
+}
+
+/* 余白系（既存の margin/padding を大きく変えない程度に） */
+.suggest-dropdown .suggest-list,
+[data-suggest-dropdown] .suggest-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+}
+
+/* アイテム */
+.suggest-item,
+[role="option"].suggest-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.4;
+}
+
+/* ホバー/選択状態（キーボード操作時も視認性を確保） */
+.suggest-item:hover,
+.suggest-item.is-active,
+[role="option"].suggest-item[aria-selected="true"] {
+  background: var(--suggest-active-bg);
+}
+
+/* サブラベルや補助テキスト */
+.suggest-item .sublabel,
+.suggest-item .meta {
+  font-size: 12px;
+  color: var(--suggest-muted);
+}
+
+/* 区切り線 */
+.suggest-separator {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--suggest-separator);
+}
+
+/* スクロールバー（非必須） */
+.suggest-dropdown::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.suggest-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, .35);
+  border-radius: 8px;
+}
+.suggest-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+

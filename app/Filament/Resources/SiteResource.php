@@ -12,6 +12,9 @@ use Filament\Tables\Table;
 use Filament\Notifications\Notification;
 use App\Filament\Resources\Traits\ScopesToSite;
 //use App\Traits\ScopesToSite;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class SiteResource extends Resource
 {
@@ -36,12 +39,7 @@ class SiteResource extends Resource
 
     public static function getModelLabel(): string
     {
-        return __('nav.sites'); // 画面タイトル等で使う単数名
-    }
-
-    public static function getPluralModelLabel(): string
-    {
-        return __('nav.sites'); // 複数名
+        return __('nav.sites');
     }
 
     public static function form(Form $form): Form
@@ -65,36 +63,17 @@ class SiteResource extends Resource
                         ->label('Active')
                         ->default(true),
 
-                    Forms\Components\TextInput::make('rate_limit_per_min')
-                        ->label('Rate Limit / min')
-                        ->numeric()
-                        ->default(120)
-                        ->minValue(10),
-                ]),
-
-            Forms\Components\Section::make('Security / API')
-                ->columns(2)
-                ->schema([
-                    Forms\Components\TextInput::make('api_key')
-                        ->label('API Key (公開可)')
-                        ->readOnly()
-                        ->dehydrated(false)
-                        ->helperText('Rotate API Key アクションで再発行できます'),
-
                     Forms\Components\TextInput::make('jwt_secret')
-                        ->label('JWT Secret (非公開)')
+                        ->label('JWT Secret')
                         ->password()
                         ->revealable()
-                        ->readOnly()
-                        ->dehydrated(false)
-                        ->helperText('Rotate JWT Secret アクションで再発行'),
+                        ->helperText('Embed で user token を使う場合の署名鍵'),
 
                     Forms\Components\TextInput::make('jwt_issuer')
                         ->label('JWT Issuer')
-                        ->default('suggest-sa')
-                        ->maxLength(255),
+                        ->helperText('例: suggest-sa'),
 
-                    Forms\Components\TagsInput::make('allowed_origins')
+                    Forms\Components\TextInput::make('allowed_origins')
                         ->label('Allowed Origins')
                         ->placeholder('https://example.com')
                         ->helperText('CORS許可するオリジンを列挙（空=制限なし）'),
@@ -112,19 +91,24 @@ class SiteResource extends Resource
                             if (!$record) return '';
                             $siteKey = $record->site_key ?? '';
                             $apiKey  = $record->api_key ?? '';
+
+                            // 実環境のドメインを APP_URL から展開
+                            $base    = rtrim(config('app.url'), '/');
+                            $cdn     = "{$base}/cdn";
+                            $apiBase = $base; // API は同ドメイン配下 /api を想定
+
                             return <<<HTML
-<link rel="stylesheet" href="https://your-cdn.example/suggest.css">
-<input type="search" class="my-suggest" placeholder="検索">
-<script defer src="https://your-cdn.example/suggest.js"
+<link rel="stylesheet" href="{$cdn}/suggest.css">
+<script defer src="{$cdn}/suggest.js"
   data-site-key="{$siteKey}"
-  data-api="https://api.your-domain.example/api/suggest"
-  data-click="https://api.your-domain.example/api/click"
+  data-api="{$apiBase}/api/suggest"
+  data-click="{$apiBase}/api/click"
   data-api-key="{$apiKey}"
   data-input-class="my-suggest"
   data-open-on-focus="true"></script>
 HTML;
                         }),
-                ]),
+                ])->columns(1),
         ]);
     }
 
@@ -151,56 +135,45 @@ HTML;
                     ->copyMessage('Copied!')
                     ->limit(24),
 
-                Tables\Columns\TextColumn::make('jwt_issuer')
-                    ->label('JWT Issuer')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                Tables\Columns\TextColumn::make('rate_limit_per_min')
-                    ->label('Rate / min')
-                    ->alignRight(),
+                Tables\Columns\TextColumn::make('allowed_origins')
+                    ->label('Allowed Origins')
+                    ->limit(30),
 
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Active')
                     ->boolean()
-                    ->sortable(),
+                    ->alignCenter(),
 
                 Tables\Columns\TextColumn::make('updated_at')
-                    ->since()
-                    ->label('Updated'),
+                    ->dateTime('Y-m-d H:i')
+                    ->since(),
             ])
             ->filters([
-                Tables\Filters\TernaryFilter::make('is_active')->label('Active'),
+                //
             ])
             ->actions([
-                Tables\Actions\Action::make('rotateApiKey')
-                    ->label('Rotate API Key')
-                    ->requiresConfirmation()
-                    ->color('warning')
-                    ->action(function (Site $record) {
-                        $record->api_key = rtrim(strtr(base64_encode(random_bytes(28)), '+/', '-_'), '=');
-                        $record->save();
-                        Notification::make()->title('API Key rotated')->success()->send();
-                    }),
-
-                Tables\Actions\Action::make('rotateJwtSecret')
-                    ->label('Rotate JWT Secret')
-                    ->requiresConfirmation()
-                    ->color('danger')
-                    ->action(function (Site $record) {
-                        $record->jwt_secret = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
-                        $record->save();
-                        Notification::make()->title('JWT Secret rotated')->success()->send();
-                    }),
-
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\Action::make('regenerateApiKey')
+                    ->label('Regenerate API Key')
+                    ->requiresConfirmation()
+                    ->action(function (Site $record) {
+                        $record->regenerateApiKey();
+                        Notification::make()
+                            ->title('API Key regenerated')
+                            ->success()
+                            ->send();
+                    }),
             ])
             ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ])
-            ->defaultSort('updated_at', 'desc');
+                Tables\Actions\DeleteBulkAction::make(),
+            ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            //
+        ];
     }
 
     public static function getPages(): array
@@ -211,4 +184,21 @@ HTML;
             'edit'   => Pages\EditSite::route('/{record}/edit'),
         ];
     }
+
+    /**
+     * ナビゲーションや一覧クエリのテナント/ユーザー境界
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        $q = parent::getEloquentQuery();
+
+        // 所有モデルなら user_id で
+        if (Schema::hasColumn('sites', 'user_id')) {
+            return $q->where('user_id', Auth::id());
+        }
+
+        // 多対多の場合は join でユーザーに紐づくものだけ
+        return $q->whereHas('users', fn(Builder $b) => $b->whereKey(Auth::id()));
+    }
 }
+

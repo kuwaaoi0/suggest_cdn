@@ -16,11 +16,12 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
 // サイトスコープ用のトレイトを使っているなら（あなたの実装に合わせて）
-use App\Filament\Resources\Traits\ScopesToSite;
+//use App\Filament\Resources\Traits\ScopesToSite;
+use Illuminate\Support\Facades\Auth;
 
 class KeywordResource extends Resource
 {
-    use ScopesToSite;
+    //use ScopesToSite;
 
     protected static ?string $model = Keyword::class;
 
@@ -54,9 +55,7 @@ class KeywordResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            // current_site を自動セット（共有で作りたい運用があればここを調整）
-            Hidden::make('site_id')
-                ->default(fn () => session('current_site_id')),
+            Hidden::make('user_id')->default(fn () => Auth::id())->required(),
 
             // キーワード名
             TextInput::make('label')
@@ -72,19 +71,14 @@ class KeywordResource extends Resource
                     name: 'genre',           // Keyword::genre() が必要
                     titleAttribute: 'name',
                     modifyQueryUsing: function (Builder $query) {
-                        $siteId = session('current_site_id');
-                        $query->where(function ($q) use ($siteId) {
-                            $q->where('site_id', $siteId)
-                              ->orWhereNull('site_id'); // 共有(NULL)も候補に含める。不要なら削除
-                        })->orderBy('name');
+                        $query->where('user_id', Auth::id())
+                        ->orderBy('name');
                     }
                 )
                 ->searchable()
                 ->preload()
                 ->required()
-                ->getOptionLabelFromRecordUsing(
-                    fn ($record) => $record->name . ($record->site_id ? '' : '（共有）')
-                ),
+                ->getOptionLabelFromRecordUsing(fn ($record) => $record->name),
         ]);
     }
 
@@ -134,11 +128,8 @@ class KeywordResource extends Resource
                         name: 'genre',
                         titleAttribute: 'name',
                         modifyQueryUsing: function (Builder $query) {
-                            $siteId = session('current_site_id');
-                            $query->where(function ($q) use ($siteId) {
-                                $q->where('site_id', $siteId)
-                                  ->orWhereNull('site_id');
-                            })->orderBy('name');
+                            $query->where('user_id', Auth::id())
+                            ->orderBy('name');
                         }
                     ),
             ])
@@ -172,14 +163,7 @@ class KeywordResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        $siteId = session('current_site_id');
-
-        return parent::getEloquentQuery()
-            // ※ ここで「where だけ」足し、select は * のままにする
-            ->where(function ($q) use ($siteId) {
-                $q->where('site_id', $siteId)
-                  ->orWhereNull('site_id'); // 共有も一覧に出すなら残す。不要なら削除
-            })
-            ->select('*'); // 念のため明示
+    	$q = parent::getEloquentQuery();
+    	return $q->where('user_id', Auth::id());
     }
 }

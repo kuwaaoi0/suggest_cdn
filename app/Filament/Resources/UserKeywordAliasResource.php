@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class UserKeywordAliasResource extends Resource
 {
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $model = UserKeywordAlias::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';

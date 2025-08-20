@@ -17,6 +17,8 @@ class Developers extends Page implements Forms\Contracts\HasForms
     protected static ?string $navigationLabel = 'Developers';
     protected static ?int    $navigationSort  = 99;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string $view = 'filament.pages.developers';
 
     public ?int $site_id = null;
@@ -98,13 +100,13 @@ class Developers extends Page implements Forms\Contracts\HasForms
 
     protected function buildSnippets(Site $site): void
     {
-        $api = 'https://api.your-domain.example';
-        $cdn = 'https://your-cdn.example';
+	$base = rtrim(config('app.url'), '/');   // = https://サジェスト検索.com
+        $api = $base;
+        $cdn = $base;
 
         $this->embed = <<<HTML
-<link rel="stylesheet" href="{$cdn}/suggest.css?v=1">
-<input type="search" class="my-suggest" placeholder="検索">
-<script defer src="{$cdn}/suggest.js?v=1"
+<link rel="stylesheet" href="{$cdn}/assets/suggest.css?v=1">
+<script defer src="{$cdn}/assets/suggest.js?v=1"
   data-site-key="{$site->site_key}"
   data-api="{$api}/api/suggest"
   data-click="{$api}/api/click"
@@ -156,4 +158,11 @@ token = jwt.encode(payload, "{\$secret}", algorithm="HS256")
 print(token)
 PY;
     }
+
+
+    public static function canAccess(): bool
+    {
+        return false;
+    }
+
 }

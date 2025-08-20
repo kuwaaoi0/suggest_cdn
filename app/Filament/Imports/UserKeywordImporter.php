@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Importers;
+namespace App\Filament\Imports;
 
 use App\Models\Genre;
 use App\Models\Site;
@@ -36,16 +36,36 @@ class UserKeywordImporter extends Importer
     public static function getColumns(): array
     {
         return [
-            ImportColumn::make('external_user_id')->required()->rules(['string','max:255']),
-            ImportColumn::make('site_key')->label('site_key（任意）')->rules(['nullable','string','max:255']),
-            ImportColumn::make('label')->required()->rules(['string','max:255']),
-            ImportColumn::make('reading')->rules(['nullable','string','max:255']),
-            ImportColumn::make('genre')->rules(['nullable','string','max:255']),
-            ImportColumn::make('weight')->rules(['nullable','integer']),
-            ImportColumn::make('visibility')->rules(['nullable','in:default,force_show,force_hide']),
-            ImportColumn::make('boost')->rules(['nullable','integer']),
-            ImportColumn::make('is_active')->rules(['nullable','boolean']),
-            ImportColumn::make('aliases')->label('aliases（; 区切り）')->rules(['nullable','string']),
+            // 列のマッピング必須＋値も必須
+            ImportColumn::make('external_user_id')
+                ->requiredMapping()
+                ->rules(['required','string','max:255']),
+
+            ImportColumn::make('label')
+                ->requiredMapping()
+                ->rules(['required','string','max:255']),
+
+            ImportColumn::make('reading')
+                ->rules(['nullable','string','max:255']),
+
+            ImportColumn::make('genre')
+                ->rules(['nullable','string','max:255']),
+
+            ImportColumn::make('weight')
+                ->rules(['nullable','integer']),
+
+            ImportColumn::make('visibility')
+                ->rules(['nullable','in:default,force_show,force_hide']),
+
+            ImportColumn::make('boost')
+                ->rules(['nullable','integer']),
+
+            ImportColumn::make('is_active')
+                ->rules(['nullable','boolean']),
+
+            ImportColumn::make('aliases')
+                ->label('aliases（; 区切り）')
+                ->rules(['nullable','string']),
         ];
     }
 
